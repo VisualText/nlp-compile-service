@@ -37,9 +37,16 @@ done
 [ -d "$ANAPATH" ]     || { echo "emit-cmake.sh: --anapath not a directory: $ANAPATH" >&2; exit 2; }
 [ -d "$ENGINE_LIBS" ] || { echo "emit-cmake.sh: --engine-libs not a directory: $ENGINE_LIBS" >&2; exit 2; }
 
-# Use absolute, forward-slash paths so the CMakeLists works on Windows runners too.
-ANAPATH=$(cd "$ANAPATH" && pwd)
-ENGINE_LIBS=$(cd "$ENGINE_LIBS" && pwd)
+# Use absolute, forward-slash paths CMake accepts on every platform.
+# On Windows (MSYS bash on GH runners), plain `pwd` returns `/c/...` which
+# Windows cmake cannot resolve. `pwd -W` returns Windows-style `C:/...`.
+if [ "${OS:-}" = "Windows_NT" ]; then
+  ANAPATH=$(cd "$ANAPATH" && pwd -W)
+  ENGINE_LIBS=$(cd "$ENGINE_LIBS" && pwd -W)
+else
+  ANAPATH=$(cd "$ANAPATH" && pwd)
+  ENGINE_LIBS=$(cd "$ENGINE_LIBS" && pwd)
+fi
 
 if [ "$KB_ONLY" = "true" ]; then
   SRC_GLOB="\"$ANAPATH/kb/*.cpp\""
