@@ -1,0 +1,168 @@
+name: Compile Analyzer
+
+# DRAFT. Triggered per user-build by a dispatcher service.
+# Inputs come from the VSCode NLP++ extension via the dispatcher.
+# Helper scripts (./scripts/emit-cmake.sh, ./scripts/upload-result.sh)
+# are referenced but not yet implemented.
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobId:
+        description: "Opaque job ID assigned by the dispatcher."
+        required: true
+        type: string
+      payloadUrl:
+        description: "Signed URL to the generated-C++ tarball (.tar.gz)."
+        required: true
+        type: string
+      engineVersion:
+        description: "nlp-engine release tag (e.g. v3.4.7). Used to pull the matching compile libs."
+        required: true
+        type: string
+      platform:
+        description: "Target platform: windows | macos-arm64 | macos-x86_64 | linux-20.04 | linux-22.04 | linux-latest."
+        required: true
+        type: string
+      analyzerName:
+        description: "Base name for the output shared library."
+        required: true
+        type: string
+      kbOnly:
+        description: "true = -COMPILEKB (only kb/*.cpp). false = -COMPILE (run/ + kb/)."
+        required: true
+        type: boolean
+      callbackUrl:
+        description: "Dispatcher webhook to POST final job status to."
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build (${{ inputs.platform }})
+    # RUNNER_MAP repo variable selects the right runner image per platform:
+    #   windows       -> windows-2019
+    #   macos-arm64   -> macos-14
+    #   macos-x86_64  -> macos-13
+    #   linux-20.04   -> ubuntu-22.04   (with ubuntu:20.04 container, see below)
+    #   linux-22.04   -> ubuntu-22.04
+    #   linux-latest  -> ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_MAP)[inputs.platform] }}
+
+    steps:
+      - name: Fetch payload
+        run: |
+          curl -fsSL "${{ inputs.payloadUrl }}" -o payload.tar.gz
+          mkdir work && tar -xzf payload.tar.gz -C work
+
+      - name: Fetch matching engine compile libs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          case "${{ inputs.platform }}" in
+            windows)        asset=nlpengine-compile-libs.zip ;;
+            macos-*)        asset=nlpengine-compile-libs-macos.zip ;;
+            linux-20.04)    asset=nlpengine-compile-libs-linux-20.04.zip ;;
+            linux-22.04)    asset=nlpengine-compile-libs-linux-22.04.zip ;;
+            linux-latest)   asset=nlpengine-compile-libs-linux-latest.zip ;;
+            *) echo "Unknown platform: ${{ inputs.platform }}" >&2; exit 1 ;;
+          esac
+          mkdir engine-libs
+          gh release download "${{ inputs.engineVersion }}" \
+            --repo VisualText/nlp-engine \
+            --pattern "$asset" \
+            --dir engine-libs
+          unzip "engine-libs/$asset" -d engine-libs
+
+      - name: Synthesize CMakeLists.txt
+        # Mirrors src/compile.ts:generateCompileCMakeLists in vscode-nlp,
+        # with includeDirs/libraryFiles pointed at engine-libs/.
+        shell: bash
+        run: |
+          bash scripts/emit-cmake.sh \
+            --anapath work \
+            --engine-libs engine-libs \
+            --analyzer "${{ inputs.analyzerName }}" \
+            --kb-only "${{ inputs.kbOnly }}"
+
+      - name: Configure (non-Windows)
+        if: inputs.platform != 'windows'
+        run: cmake -S work -B work/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure (Windows, VS 2019 dev shell)
+        if: inputs.platform == 'windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S work -B work\build -G "Visual Studio 16 2019" -A x64
+
+      - name: Build (non-Windows)
+        id: build_unix
+        if: inputs.platform != 'windows'
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build work/build --parallel 2>&1 | tee work/build.log
+
+      - name: Build (Windows)
+        id: build_win
+        if: inputs.platform == 'windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake --build work\build --config Release --parallel > work\build.log 2>&1
+          type work\build.log
+
+      - name: Locate artifact
+        id: artifact
+        if: success()
+        shell: bash
+        run: |
+          case "${{ inputs.platform }}" in
+            windows)   ext=dll ;;
+            macos-*)   ext=dylib ;;
+            *)         ext=so ;;
+          esac
+          path=$(find work -name "${{ inputs.analyzerName }}.$ext" | head -n1)
+          if [ -z "$path" ]; then
+            echo "Expected ${{ inputs.analyzerName }}.$ext not produced." >&2
+            exit 1
+          fi
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+      - name: Parse errors (on failure)
+        if: failure()
+        shell: bash
+        run: |
+          python3 scripts/parse-errors.py \
+            --log work/build.log \
+            --anapath work \
+            --out work/errors.json
+
+      - name: Upload result
+        if: always()
+        env:
+          DISPATCHER_URL: ${{ secrets.DISPATCHER_URL }}
+          JOB_TOKEN:      ${{ secrets.JOB_TOKEN }}
+        shell: bash
+        run: |
+          args=(--job "${{ inputs.jobId }}")
+          if [ -f "${{ steps.artifact.outputs.path }}" ]; then
+            args+=(--lib "${{ steps.artifact.outputs.path }}")
+          fi
+          [ -f work/build.log ]  && args+=(--log work/build.log)
+          [ -f work/errors.json ] && args+=(--errors work/errors.json)
+          bash scripts/upload-result.sh "${args[@]}"
+
+      - name: Notify dispatcher
+        if: always()
+        shell: bash
+        run: |
+          curl -fsSL -X POST "${{ inputs.callbackUrl }}" \
+            -H 'content-type: application/json' \
+            -d "$(jq -n \
+              --arg id  '${{ inputs.jobId }}' \
+              --arg st  '${{ job.status }}' \
+              --arg pl  '${{ inputs.platform }}' \
+              '{jobId:$id, status:$st, platform:$pl}')"

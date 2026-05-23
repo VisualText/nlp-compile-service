@@ -1,0 +1,28 @@
+# Cloudflare Worker config for the nlp-compile-service dispatcher.
+# Deploy: wrangler deploy
+# Secrets (set with `wrangler secret put <NAME>`):
+#   GH_TOKEN    fine-grained PAT, actions:write on the dispatch repo
+#   JOB_TOKEN   shared secret used by runners to authenticate uploads
+
+name = "nlp-compile-dispatcher"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+# Public vars (non-secret). Update for your deployment.
+[vars]
+GH_REPO       = "VisualText/nlp-compile-service"
+CALLBACK_BASE = "https://compile.visualtext.org"
+
+# Object store: tarballs, built libs, build logs, error JSON.
+[[r2_buckets]]
+binding     = "BLOBS"
+bucket_name = "nlp-compile-blobs"
+
+# Job rows keyed by jobId.
+[[kv_namespaces]]
+binding = "JOBS"
+id      = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Optional: bump for higher request throughput once the service has users.
+# [limits]
+# cpu_ms = 50

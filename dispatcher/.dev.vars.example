@@ -1,0 +1,11 @@
+# Copy this file to `.dev.vars` (gitignored) and fill in the values.
+# wrangler dev loads it and overrides anything in wrangler.toml.
+
+# Fine-grained GitHub PAT with `actions: write` on the dispatch repo.
+# Only required if you actually want POST /build to fire workflow_dispatch
+# during local testing; otherwise leave blank and stub dispatchWorkflow().
+GH_TOKEN=
+
+# Shared secret runners present in `Authorization: Bearer ...` on uploads.
+# Any non-empty string is fine for local dev.
+JOB_TOKEN=local-dev-shared-secret
