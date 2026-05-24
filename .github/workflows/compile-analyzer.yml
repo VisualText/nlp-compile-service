@@ -40,14 +40,17 @@ on:
 jobs:
   build:
     name: Build (${{ inputs.platform }})
-    # RUNNER_MAP repo variable selects the right runner image per platform:
-    #   windows       -> windows-2019
-    #   macos-arm64   -> macos-14
-    #   macos-x86_64  -> macos-13
-    #   linux-20.04   -> ubuntu-22.04   (with ubuntu:20.04 container, see below)
-    #   linux-22.04   -> ubuntu-22.04
-    #   linux-latest  -> ubuntu-latest
-    runs-on: ${{ fromJSON(vars.RUNNER_MAP)[inputs.platform] }}
+    # Platform → runner image. Hardcoded inline so no repo variable is needed;
+    # update here when adding platforms or rotating runner images.
+    runs-on: >-
+      ${{
+        inputs.platform == 'windows'      && 'windows-2019' ||
+        inputs.platform == 'macos-arm64'  && 'macos-14'     ||
+        inputs.platform == 'macos-x86_64' && 'macos-13'     ||
+        inputs.platform == 'linux-20.04'  && 'ubuntu-22.04' ||
+        inputs.platform == 'linux-22.04'  && 'ubuntu-22.04' ||
+        'ubuntu-latest'
+      }}
 
     steps:
       - name: Fetch payload
