@@ -11,7 +11,7 @@ compatibility_date = "2026-05-01"
 # Public vars (non-secret). Update for your deployment.
 [vars]
 GH_REPO       = "VisualText/nlp-compile-service"
-CALLBACK_BASE = "https://compile.visualtext.org"
+CALLBACK_BASE = "https://nlp-compile-dispatcher.dehilster.workers.dev"
 
 # Object store: tarballs, built libs, build logs, error JSON.
 [[r2_buckets]]
@@ -21,7 +21,7 @@ bucket_name = "nlp-compile-blobs"
 # Job rows keyed by jobId.
 [[kv_namespaces]]
 binding = "JOBS"
-id      = "REPLACE_WITH_KV_NAMESPACE_ID"
+id      = "b3c2c33f3c9142e0bf535245946388f5"
 
 # Optional: bump for higher request throughput once the service has users.
 # [limits]
