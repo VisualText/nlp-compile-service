@@ -53,6 +53,9 @@ jobs:
       }}
 
     steps:
+      - name: Checkout nlp-compile-service (scripts/ + workflow assets)
+        uses: actions/checkout@v4
+
       - name: Fetch payload
         run: |
           curl -fsSL "${{ inputs.payloadUrl }}" -o payload.tar.gz
