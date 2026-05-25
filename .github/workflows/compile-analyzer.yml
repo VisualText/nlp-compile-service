@@ -44,11 +44,11 @@ jobs:
     # update here when adding platforms or rotating runner images.
     runs-on: >-
       ${{
-        inputs.platform == 'windows'      && 'windows-2019' ||
-        inputs.platform == 'macos-arm64'  && 'macos-14'     ||
-        inputs.platform == 'macos-x86_64' && 'macos-13'     ||
-        inputs.platform == 'linux-20.04'  && 'ubuntu-22.04' ||
-        inputs.platform == 'linux-22.04'  && 'ubuntu-22.04' ||
+        inputs.platform == 'windows'      && 'windows-latest' ||
+        inputs.platform == 'macos-arm64'  && 'macos-latest'   ||
+        inputs.platform == 'macos-x86_64' && 'macos-13'       ||
+        inputs.platform == 'linux-20.04'  && 'ubuntu-22.04'   ||
+        inputs.platform == 'linux-22.04'  && 'ubuntu-22.04'   ||
         'ubuntu-latest'
       }}
 
