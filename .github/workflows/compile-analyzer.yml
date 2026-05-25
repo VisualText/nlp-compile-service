@@ -72,7 +72,12 @@ jobs:
             *) echo "Unknown platform: ${{ inputs.platform }}" >&2; exit 1 ;;
           esac
           mkdir engine-libs
-          gh release download "${{ inputs.engineVersion }}" \
+          # Engine release tags are `vX.Y.Z`, but the extension may send the
+          # raw version string from `nlp.exe --version` (e.g. "3.1.21").
+          # Normalize so either form works.
+          tag="${{ inputs.engineVersion }}"
+          case "$tag" in v*) ;; *) tag="v$tag" ;; esac
+          gh release download "$tag" \
             --repo VisualText/nlp-engine \
             --pattern "$asset" \
             --dir engine-libs
