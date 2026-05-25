@@ -101,12 +101,15 @@ jobs:
         if: inputs.platform != 'windows'
         run: cmake -S work -B work/build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Configure (Windows, VS 2019 dev shell)
+      - name: Configure (Windows)
         if: inputs.platform == 'windows'
         shell: cmd
-        run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          cmake -S work -B work\build -G "Visual Studio 16 2019" -A x64
+        # No explicit vcvars / generator — cmake auto-detects the VS install
+        # on whatever windows-* runner is in use (currently windows-latest =
+        # Server 2022 with VS 2022). Hardcoding "Visual Studio 16 2019" and
+        # a Program Files (x86) path broke when GitHub retired
+        # windows-2019.
+        run: cmake -S work -B work\build -A x64
 
       - name: Build (non-Windows)
         id: build_unix
@@ -120,8 +123,10 @@ jobs:
         id: build_win
         if: inputs.platform == 'windows'
         shell: cmd
+        # Same vcvars-removal rationale as the configure step above.
+        # `cmake --build` invokes msbuild via the generator metadata cmake
+        # already baked into work\build, so no env setup is needed.
         run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           cmake --build work\build --config Release --parallel > work\build.log 2>&1
           type work\build.log
 
