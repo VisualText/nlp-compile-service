@@ -122,13 +122,18 @@ jobs:
       - name: Build (Windows)
         id: build_win
         if: inputs.platform == 'windows'
-        shell: cmd
+        shell: bash
         # Same vcvars-removal rationale as the configure step above.
         # `cmake --build` invokes msbuild via the generator metadata cmake
-        # already baked into work\build, so no env setup is needed.
+        # already baked into work/build, so no env setup is needed.
+        # bash + tee lets the build output stream live to the GHA log
+        # while still capturing it to work/build.log for upload-result.sh.
+        # cmd's `>` redirect only revealed output after the step completed,
+        # making long builds (10+ min for large analyzers like parse-en-us)
+        # look hung when they were actually progressing.
         run: |
-          cmake --build work\build --config Release --parallel > work\build.log 2>&1
-          type work\build.log
+          set -o pipefail
+          cmake --build work/build --config Release --parallel 2>&1 | tee work/build.log
 
       - name: Locate artifact
         id: artifact
