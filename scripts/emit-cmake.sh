@@ -127,6 +127,17 @@ if(WIN32)
         target_compile_options(nlp_generated PRIVATE /wd4005 /FI"StdAfx.h")
     endif()
 else()
+    # NLP-ENGINE-513: define LINUX so the engine's public headers take the
+    # Linux/macOS branches that polyfill <tchar.h> and skip the Windows DLL
+    # macros. Without this:
+    #   - include/Api/libStream.h leaves LIBSTREAM_API expanding to
+    #     __declspec(dllimport), which gcc rejects ("expected initializer
+    #     before 'CLibStream'").
+    #   - include/Api/my_tchar.h's '#define _TCHAR char' is gated on
+    #     '#ifdef LINUX', so any generated source that uses _TCHAR fails.
+    # Mirrors the per-subdir add_definitions(-DLINUX) the engine itself
+    # uses in cs/libprim, cs/libconsh, lite, etc.
+    target_compile_definitions(nlp_generated PRIVATE LINUX)
     target_compile_options(nlp_generated PRIVATE -include StdAfx.h)
     find_library(DL_LIBRARY dl)
     if(DL_LIBRARY)
