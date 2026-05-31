@@ -108,7 +108,12 @@ if(NOT GENERATED_CPP)
 endif()
 
 add_library(nlp_generated SHARED \${GENERATED_CPP})
-set_target_properties(nlp_generated PROPERTIES OUTPUT_NAME "$ANALYZER")
+# NLP-ENGINE-513: PREFIX "" suppresses the default "lib" that CMake adds to
+# SHARED targets on Linux/macOS. Without it, the build produces
+# libdate-time.so / libdate-time.dylib, but compile-analyzer.yml's
+# `find -name "<analyzer>.so"` and the extension's runtime loader both
+# expect the bare <analyzer>.so / .dylib (matching Windows's <analyzer>.dll).
+set_target_properties(nlp_generated PROPERTIES OUTPUT_NAME "$ANALYZER" PREFIX "")
 
 target_include_directories(nlp_generated PRIVATE
     "$ANAPATH"
