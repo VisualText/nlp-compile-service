@@ -143,7 +143,25 @@ ${ENGINE_LIB_LINES})
 set(NLP_ICU_LIBRARIES
 ${ICU_LIB_LINES})
 
-target_link_libraries(nlp_generated PRIVATE \${NLP_ENGINE_LIBRARIES})
+if(WIN32 OR APPLE)
+    # MSVC link.exe and macOS ld re-scan static archives until convergence
+    # by default, so simple list ordering is fine.
+    target_link_libraries(nlp_generated PRIVATE \${NLP_ENGINE_LIBRARIES})
+else()
+    # GNU ld scans static archives only ONCE in declaration order. Engine
+    # libs are sorted alphabetically (libconsh.a, libkbm.a, liblite.a,
+    # libprim.a, libwords.a), so by the time fn.o (in liblite.a) is pulled
+    # in and introduces a reference to CG::addWord (defined in libconsh.a's
+    # cg.o), libconsh.a is already past — and the symbol is left undefined.
+    # For a SHARED target the linker silently defers this to runtime, then
+    # dlopen blows up with "undefined symbol: _ZN2CG7addWordEPc".
+    # --start-group / --end-group makes the linker re-scan the group until
+    # no new references appear.
+    target_link_libraries(nlp_generated PRIVATE
+        "-Wl,--start-group"
+        \${NLP_ENGINE_LIBRARIES}
+        "-Wl,--end-group")
+endif()
 
 if(WIN32)
     # Windows ICU libs are import libs for icu*.dll — dynamic linkage, no
