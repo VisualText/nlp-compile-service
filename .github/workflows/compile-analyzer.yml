@@ -117,7 +117,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cmake --build work/build --parallel 2>&1 | tee work/build.log
+          cmake --build work/build --parallel 4 2>&1 | tee work/build.log
 
       - name: Build (Windows)
         id: build_win
@@ -133,7 +133,7 @@ jobs:
         # look hung when they were actually progressing.
         run: |
           set -o pipefail
-          cmake --build work/build --config Release --parallel 2>&1 | tee work/build.log
+          cmake --build work/build --config Release --parallel 4 2>&1 | tee work/build.log
 
       - name: Locate artifact
         id: artifact
