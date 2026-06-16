@@ -79,18 +79,30 @@ Steps:
 3. `gh release download v<engineVersion>` of `nlpengine-compile-libs-<platform>.zip` from `VisualText/nlp-engine`
 4. Synthesize `CMakeLists.txt` via [`scripts/emit-cmake.sh`](scripts/emit-cmake.sh)
 5. `cmake -S work -B work/build && cmake --build work/build --config Release`
-6. Locate the produced shared library
+6. Locate the produced shared library (named per the compile mode — see [Output library naming](#output-library-naming))
 7. On failure: parse compile errors via [`scripts/parse-errors.py`](scripts/parse-errors.py) into a structured `errors.json`
 8. Upload artifact + logs back to dispatcher via [`scripts/upload-result.sh`](scripts/upload-result.sh)
 9. POST final status to `/callback/:id`
 
 Platform matrix is hardcoded inline (Windows → `windows-latest`, macOS-arm64 → `macos-latest`, etc.).
 
+#### Output library naming
+
+The base name of the produced shared library depends on which compile mode the extension requested. The extension resolves the name and sends it as the `analyzerName` input (alongside a `kbOnly` boolean), so the service uses it verbatim — except for KB-only, where both `emit-cmake.sh` and the workflow force `kb` regardless of the name sent. The three modes mirror `src/compile.ts` in [vscode-nlp](https://github.com/VisualText/vscode-nlp):
+
+| Compile mode | Engine flag | `kbOnly` | `analyzerName` | Library output |
+|---|---|---|---|---|
+| KB only | `-COMPILEKB` | `true` | `kb` | `kb.{dll,dylib,so}` |
+| Analyzer only | `-COMPILEANA` | `false` | `analyzer` | `analyzer.{dll,dylib,so}` |
+| Analyzer + KB | `-COMPILE` | `false` | `<analyzer-name>` | `<analyzer-name>.{dll,dylib,so}` |
+
+Because the manifest carries only the `kbOnly` boolean, analyzer-only and analyzer+KB are indistinguishable to the service except by the `analyzerName` it's given; both compile `run/`+`kb/` and differ only in output name.
+
 ### `scripts/`
 
 | File | Purpose |
 |---|---|
-| `emit-cmake.sh` | Generates `CMakeLists.txt` for the analyzer's `run/*.cpp` + `kb/*.cpp` against the unzipped engine compile libs. Mirrors the local-compile cmake template in `vscode-nlp/src/compile.ts`. Handles the per-platform linker quirks needed for the runtime `.so` / `.dylib` / `.dll` to load and resolve cleanly: defines `LINUX` on non-Windows so the engine headers take the right branch (`my_tchar.h` typedef, no `__declspec(dllimport)`); sets `PREFIX ""` so SHARED targets output `<analyzer>.<ext>` on every platform (matching what the extension's runtime loader and `compile-analyzer.yml` expect); wraps ICU static archives in `-Wl,--whole-archive` on Linux and `-Wl,-force_load,<archive>` on macOS so virtual-class typeinfo (`icu::ByteSink` etc.) is always emitted into the `.so`/`.dylib` regardless of whether analyzer code references it directly; and on Linux wraps the engine static libs in `-Wl,--start-group ... --end-group` so symbols defined in `libconsh.a` resolve when referenced from `liblite.a` (the libs are sorted alphabetically, so without this `CG::addWord` and friends would be left undefined). |
+| `emit-cmake.sh` | Generates `CMakeLists.txt` for the analyzer's `run/*.cpp` + `kb/*.cpp` against the unzipped engine compile libs. Mirrors the local-compile cmake template in `vscode-nlp/src/compile.ts`. Handles the per-platform linker quirks needed for the runtime `.so` / `.dylib` / `.dll` to load and resolve cleanly: defines `LINUX` on non-Windows so the engine headers take the right branch (`my_tchar.h` typedef, no `__declspec(dllimport)`); sets `PREFIX ""` so SHARED targets output `<analyzer>.<ext>` on every platform (matching what the extension's runtime loader and `compile-analyzer.yml` expect), forcing the base name to `kb` for KB-only builds (`--kb-only true`) and otherwise using the passed `--analyzer` name (`analyzer` for `-COMPILEANA`, `<analyzer-name>` for `-COMPILE` — see [Output library naming](#output-library-naming)); wraps ICU static archives in `-Wl,--whole-archive` on Linux and `-Wl,-force_load,<archive>` on macOS so virtual-class typeinfo (`icu::ByteSink` etc.) is always emitted into the `.so`/`.dylib` regardless of whether analyzer code references it directly; and on Linux wraps the engine static libs in `-Wl,--start-group ... --end-group` so symbols defined in `libconsh.a` resolve when referenced from `liblite.a` (the libs are sorted alphabetically, so without this `CG::addWord` and friends would be left undefined). |
 | `parse-errors.py` | Reads cmake/MSVC build log, extracts file/line/column/severity/message, maps generated `.cpp` line numbers back to source `.nlp` lines via `// nlp-source-file:` / `/* nlp-source: N */` provenance comments emitted by the engine. Writes `errors.json` for the extension to render. |
 | `upload-result.sh` | PUTs artifacts (built lib, build.log, errors.json) to dispatcher endpoints using `$JOB_TOKEN`. |
 

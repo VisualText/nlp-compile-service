@@ -34,6 +34,22 @@ done
 [ -n "$ANAPATH" ]     || { echo "emit-cmake.sh: --anapath required" >&2; exit 2; }
 [ -n "$ENGINE_LIBS" ] || { echo "emit-cmake.sh: --engine-libs required" >&2; exit 2; }
 [ -n "$ANALYZER" ]    || { echo "emit-cmake.sh: --analyzer required" >&2; exit 2; }
+
+# Output library base name follows the compile mode. The vscode-nlp extension
+# (src/compile.ts) resolves it as:
+#   -COMPILEKB  (KB only)        -> kb.{dll,dylib,so}
+#   -COMPILEANA (analyzer only)  -> analyzer.{dll,dylib,so}
+#   -COMPILE    (analyzer + KB)  -> <analyzer-name>.{dll,dylib,so}
+# and sends that resolved name as --analyzer, so for the analyzer-only and
+# analyzer+KB modes we use it verbatim. The manifest carries only a kbOnly
+# boolean (analyzer-only and analyzer+KB both send kbOnly=false), so we can't
+# re-derive "analyzer" vs <name> here — that distinction lives entirely in the
+# passed name. We do force "kb" for KB-only builds so that name is correct
+# regardless of what --analyzer the dispatcher sends. compile-analyzer.yml's
+# "Locate artifact" step applies the same rule.
+if [ "$KB_ONLY" = "true" ]; then
+  ANALYZER="kb"
+fi
 [ -d "$ANAPATH" ]     || { echo "emit-cmake.sh: --anapath not a directory: $ANAPATH" >&2; exit 2; }
 [ -d "$ENGINE_LIBS" ] || { echo "emit-cmake.sh: --engine-libs not a directory: $ENGINE_LIBS" >&2; exit 2; }
 
