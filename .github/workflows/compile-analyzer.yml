@@ -145,9 +145,22 @@ jobs:
             macos-*)   ext=dylib ;;
             *)         ext=so ;;
           esac
-          path=$(find work -name "${{ inputs.analyzerName }}.$ext" | head -n1)
+          # Output library base name follows the compile mode, matching
+          # emit-cmake.sh and src/compile.ts in the vscode-nlp extension:
+          #   -COMPILEKB  (KB only)       -> kb.<ext>
+          #   -COMPILEANA (analyzer only) -> analyzer.<ext>      (analyzerName="analyzer")
+          #   -COMPILE    (analyzer + KB) -> <analyzer-name>.<ext>
+          # The manifest only sends a kbOnly boolean; analyzer-only and
+          # analyzer+KB both send kbOnly=false and rely on analyzerName already
+          # being "analyzer" vs the real name, so we use it verbatim there.
+          if [ "${{ inputs.kbOnly }}" = "true" ]; then
+            libname="kb"
+          else
+            libname="${{ inputs.analyzerName }}"
+          fi
+          path=$(find work -name "$libname.$ext" | head -n1)
           if [ -z "$path" ]; then
-            echo "Expected ${{ inputs.analyzerName }}.$ext not produced." >&2
+            echo "Expected $libname.$ext not produced." >&2
             exit 1
           fi
           echo "path=$path" >> "$GITHUB_OUTPUT"
